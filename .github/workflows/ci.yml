@@ -1,0 +1,32 @@
+name: DevTrack CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  sanity-check:
+    name: Repository Sanity & Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository source code
+        uses: actions/checkout@v4
+
+      - name: Verify repository structure and Git commit
+        run: |
+          echo "=== Pipeline Triggered Successfully ==="
+          echo "Running on runner OS: $(uname -s) $(uname -m)"
+          echo "Triggered by actor: ${{ github.actor }}"
+          echo "Triggered on event: ${{ github.event_name }}"
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "=== Checking Critical Directories ==="
+          test -d backend && echo "✔ backend directory found"
+          test -d frontend && echo "✔ frontend directory found"
+          test -f docker-compose.yml && echo "✔ docker-compose.yml found"
+          test -f backend/Dockerfile && echo "✔ backend Dockerfile found"
+          test -f frontend/Dockerfile && echo "✔ frontend Dockerfile found"
