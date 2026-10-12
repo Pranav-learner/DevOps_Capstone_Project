@@ -90,3 +90,32 @@ docker compose down -v
 - **Embedded DNS & Service Discovery**: Services talk using Compose service names (`postgres:5432`) over an isolated bridge network `devtrack-network`, avoiding brittle hardcoded IP configurations.
 - **Stateful vs Stateless Lifecycle**: PostgreSQL data is decoupled into the named volume `devtrack_postgres_data` allowing stateless app container destruction without risking database state loss.
 - **Automated Schema Sync**: Container entrypoint runs `alembic upgrade head` before Uvicorn starts, synchronizing database models automatically on service launch.
+
+## Completed Modules (Phase 3 — CI/CD with GitHub Actions)
+1. **3.1 CI/CD Fundamentals & Workflow Architecture**: Established 3-stage automated pipeline design (Quality Gates: Tests & Builds $\rightarrow$ Container Build $\rightarrow$ GHCR Publishing). Decoupled CI test environment from local host database.
+2. **3.2 First GitHub Actions Workflow**: Created `.github/workflows/ci.yml` listening on `push` and `pull_request` to `main`, running on `ubuntu-latest`, verifying repository integrity and Git commit context.
+3. **3.3 Backend Automated Testing**: *(In Progress)*
+4. **3.4 Frontend Production Build**: *(Planned)*
+5. **3.5 Docker Image Builds**: *(Planned)*
+6. **3.6 GitHub Container Registry (GHCR)**: *(Planned)*
+7. **3.7 Git SHA Image Tagging**: *(Planned)*
+8. **3.8 Pipeline Quality & Security**: *(Planned)*
+9. **3.9 End-to-End Verification**: *(Planned)*
+
+## Phase 3 CI/CD Architecture & Quality Gates
+- **Trigger Strategy**: Pipeline triggers automatically on direct pushes to `main` and on pull requests targeting `main`.
+- **Quality Gates Principle**: Builds and image publishing are gated strictly behind passing automated tests. A single test failure immediately terminates the pipeline before any artifact is pushed.
+- **Workflow File**: `.github/workflows/ci.yml`
+
+## Phase 3 M5 Rubric & Evidence Tracker
+
+| Criteria | Requirement | Status | Verification Location |
+| :--- | :--- | :---: | :--- |
+| **1. Workflow Exists** | At least one workflow in `.github/workflows/` | ✅ Verified | `.github/workflows/ci.yml` |
+| **2. Trigger on `main`** | Triggers on push to `main` branch | ✅ Verified | `on.push.branches: [main]` |
+| **3. Pytest Quality Gate** | Pytest runs in CI; failure fails build | ⏳ Pending | Part 3.3 |
+| **4. Frontend Build Gate** | Production build runs in CI | ⏳ Pending | Part 3.4 |
+| **5. Docker Image Builds** | Both backend & frontend images build | ⏳ Pending | Part 3.5 |
+| **6. Publish to GHCR** | Both images pushed to `ghcr.io` | ⏳ Pending | Part 3.6 |
+| **7. Immutable SHA Tags** | Image tags use Git commit SHA (not just `latest`) | ⏳ Pending | Part 3.7 |
+
