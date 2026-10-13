@@ -443,3 +443,29 @@ All workloads target the dedicated `devtrack` namespace and pull verified OCI im
 | **9. Reusable Helm Chart** | ✅ Verified | `helm/devtrack` includes `Chart.yaml`, `values.yaml`, `_helpers.tpl`, and complete templates. Passed `helm lint` and `helm template`. Packaged into `helm/devtrack-0.1.0.tgz`. |
 | **10. Security Hardening** | ✅ Verified | All application workloads enforce `runAsNonRoot: true`, unprivileged user IDs, and `allowPrivilegeEscalation: false`. |
 
+## Phase 4 & 5 Live Cloud Deployment & Validation (EKS Sydney `ap-southeast-2`)
+
+### 1. AWS Provisioning Evidence
+- **VPC ID**: `vpc-0b5a01107a7464a86` (`10.0.0.0/16`)
+- **Public Subnets**: `subnet-0e18cd2e1e0a27700` (`ap-southeast-2a`), `subnet-0fb875614044780ee` (`ap-southeast-2b`)
+- **Private Subnets**: `subnet-0c2f2501ce5d92171` (`ap-southeast-2a`), `subnet-044aed6bda4f59b19` (`ap-southeast-2b`)
+- **NAT Gateway**: `nat-0120d7adb18ae9a60` with EIP `eipalloc-0fca3f4fb61b4e0ce`
+- **EKS Cluster**: `devtrack-eks-cluster` (Kubernetes v1.30)
+- **Worker Node Group**: `production-devtrack-managed-nodes` (2x `t3.medium`, AL2023 `AL2023_x86_64_STANDARD`)
+- **Worker Nodes**:
+  - `ip-10-0-10-155.ap-southeast-2.compute.internal` (`STATUS: Ready`)
+  - `ip-10-0-11-119.ap-southeast-2.compute.internal` (`STATUS: Ready`)
+
+### 2. Live Kubernetes Workloads Status
+- **Namespace**: `devtrack`
+- **Frontend Pods**: 2/2 Running (`devtrack-frontend-*`)
+- **Backend Pods**: 2/2 Running (`devtrack-backend-*`)
+- **PostgreSQL Pod**: 1/1 Running (`devtrack-postgres-*`)
+- **Persistent Volume**: Bound dynamically via AWS EBS CSI driver (`gp2`, 1Gi, volume `pvc-c43c306e-5088-40a6-986a-92d40efa8ed1`)
+
+### 3. End-to-End Application Validation
+- **Health Probe**: `/health` returned `{"status":"healthy"}` (HTTP 200)
+- **Readiness Probe**: `/ready` returned `{"status":"ready"}` with live database connectivity (HTTP 200)
+- **Database Migrations**: Alembic revision `149d7d96f47b` applied cleanly in the cloud database
+- **Data Persistence Verification**: Successfully created Issue #1 (`Deploy to AWS EKS`) via REST API and persisted to AWS EBS storage.
+

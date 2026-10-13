@@ -11,6 +11,7 @@ metadata:
 spec:
   accessModes:
     - {{ .Values.database.persistence.accessMode }}
+  storageClassName: {{ .Values.database.persistence.storageClass | default "gp2" }}
   resources:
     requests:
       storage: {{ .Values.database.persistence.size }}

@@ -110,6 +110,7 @@ resource "aws_eks_node_group" "devtrack" {
 
   instance_types = var.node_instance_types
   capacity_type  = "ON_DEMAND"
+  ami_type       = "AL2023_x86_64_STANDARD"
 
   scaling_config {
     desired_size = var.node_desired_size
@@ -130,4 +131,21 @@ resource "aws_eks_node_group" "devtrack" {
   tags = {
     Name = "${var.environment}-devtrack-node"
   }
+}
+
+# Attach EBS CSI Driver Policy to Node Role for persistent volume provisioning
+resource "aws_iam_role_policy_attachment" "node_AmazonEBSCSIDriverPolicy" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  role       = aws_iam_role.node.name
+}
+
+# Amazon EKS EBS CSI Driver Add-on
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name = aws_eks_cluster.devtrack.name
+  addon_name   = "aws-ebs-csi-driver"
+
+  depends_on = [
+    aws_eks_node_group.devtrack,
+    aws_iam_role_policy_attachment.node_AmazonEBSCSIDriverPolicy
+  ]
 }
