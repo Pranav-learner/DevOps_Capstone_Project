@@ -605,6 +605,37 @@ Executed against live Amazon EKS cluster in `ap-southeast-2` (DevTrack namespace
 | **GitOps Demonstration** | Declarative Git commit driving live cluster rollout | Replica scaling from 2 to 3 defined strictly via Git commit in `helm/devtrack/values.yaml`. | **PASS** ✅ |
 | **Zero Cost UI Access** | Access dashboard securely without public Load Balancer | Port-forwarding via `kubectl port-forward svc/argocd-server -n argocd 8080:443` enables local browser management without extra AWS fees. | **PASS** ✅ |
 
+## Phase 7 — Prometheus, Grafana & Observability (In Progress)
+
+### Module 7.1 — Discovery and Monitoring Readiness Assessment
+
+#### 1. Backend /metrics Implementation Audit
+- **Code Audit (`backend/app/main.py:L52-L60`)**:
+  - The endpoint `/metrics` exists and is registered under FastAPI tags `["Monitoring"]`.
+  - **Critical Finding**: The current endpoint returns static JSON (`{"app":"devtrack-api","version":"0.1.0","uptime":"ok"}`) instead of Prometheus exposition text format.
+  - No Prometheus instrumentation libraries (`prometheus-client` or `prometheus-fastapi-instrumentator`) are present in `backend/requirements.txt`.
+  - Prometheus scrapers will reject this endpoint until official Prometheus-compatible metrics (`http_requests_total`, `http_request_duration_seconds`, process metrics) are formatted.
+- **Remediation Plan**: Add `prometheus-client` to backend dependencies, generate standard Prometheus exposition format, rebuild and update image via GitOps.
+
+#### 2. Live Cluster Monitoring Inventory & Resource Headroom
+- **Monitoring Workloads**: No existing Prometheus, Grafana, ServiceMonitors, or monitoring CRDs exist in the cluster.
+- **Node Allocations**:
+  - 2x `t3.medium` instances (`ip-10-0-10-155` and `ip-10-0-11-119`).
+  - Total allocatable: ~3,860m CPU, ~6,600Mi RAM.
+  - Currently requested by DevTrack & ArgoCD: ~1,570m CPU (~40%), ~2,350Mi RAM (~35%).
+  - Available headroom: **~2,290m CPU (~60% free)** and **~4,250Mi RAM (~65% free)**.
+
+#### 3. Monitoring Architecture & GitOps Design
+- **Stack Selection**: Lightweight Prometheus Server + Standalone Grafana Deployment.
+  - Rejecting `kube-prometheus-stack` (operator + alertmanager + node-exporter + kube-state-metrics) to prevent node memory saturation on `t3.medium`.
+  - Lightweight stack footprint: ~250m CPU and ~384Mi RAM total.
+- **GitOps Separation**:
+  - Monitoring resources will reside in a dedicated `monitoring/` directory in the repository, managed via a decoupled ArgoCD Application (`argocd/monitoring-application.yaml`).
+  - Scrape target: `devtrack-backend.devtrack.svc.cluster.local:8000` via stable Kubernetes DNS service discovery.
+- **Cost & Access Model**:
+  - Internal ClusterIP services only; access strictly via `kubectl port-forward` (Prometheus `:9090`, Grafana `:3000`). Zero external Load Balancers or extra AWS cloud fees.
+
+
 
 
 
