@@ -123,7 +123,7 @@ Our automated CI/CD pipeline runs on every push and pull request to `main` via [
 
 ---
 
-### Phase 4 — Terraform & AWS Infrastructure (Underway)
+### Phase 4 — Terraform & AWS Infrastructure (Verified)
 * **Infrastructure as Code (IaC):** Modular, production-ready Terraform configuration under [`terraform/`](terraform/) targeting AWS region `ap-south-1` (Mumbai).
 * **Resilient VPC Networking:** Custom VPC (`10.0.0.0/16`), 2 public subnets across distinct Availability Zones (`ap-south-1a`, `ap-south-1b`), 2 private subnets, Internet Gateway, NAT Gateway, route tables, and official Kubernetes discovery tags (`kubernetes.io/role/elb = 1`).
 * **Amazon EKS Cluster:** AWS-managed Kubernetes control plane pinned to version `1.30` with least-privilege cluster IAM roles.
@@ -132,37 +132,64 @@ Our automated CI/CD pipeline runs on every push and pull request to `main` via [
 
 ---
 
-## 4. Quick Start (Local Docker Compose)
+### Phase 5 — Kubernetes Workloads & Helm (Complete)
+* **Dedicated Namespace:** All components deployed into isolated `devtrack` namespace.
+* **Stateless Multi-Replica Deployments:**
+  * **Frontend:** 2 replicas of React SPA on unprivileged Nginx (port 8080), non-root UID 101, liveness/readiness probes.
+  * **Backend:** 2 replicas of FastAPI REST API (port 8000), non-root UID 1000, RollingUpdate (`maxSurge: 1`, `maxUnavailable: 0`), CPU/memory requests and limits.
+* **Stateful Persistence:** PostgreSQL 16 backed by 1Gi PersistentVolumeClaim (RWO), `strategy: Recreate` preventing storage lock collisions.
+* **Ingress Routing:** NGINX Ingress routing root path `/` to Frontend (:80) and `/api`, `/docs`, `/openapi.json` to Backend (:8000).
+* **Production Helm Chart:** Reusable Helm package in [`helm/devtrack`](helm/devtrack) with `values.yaml`, helper templates, passing `helm lint`, `helm template`, and packaged into `helm/devtrack-0.1.0.tgz`.
 
-### Prerequisites
-* Docker Engine 24+ & Docker Compose v2+
-* Git
+---
 
-### Running the Entire Stack
+## 4. Deployment Guides
+
+### A. Local Docker Compose
 ```bash
-# 1. Clone the repository
-git clone https://github.com/Pranav-learner/DevOps_Capstone_Project.git
-cd DevOps_Capstone_Project
-
-# 2. Build and boot all containers
+# 1. Build and boot all containers
 docker compose up --build -d
 
-# 3. Verify running containers and health probes
+# 2. Verify running containers and health probes
 docker compose ps
 ```
 
+### B. Kubernetes Declarative Deployment (Kustomize)
+```bash
+# 1. Deploy all workloads in dependency order
+kubectl apply -k k8s/
+
+# 2. Verify Pod rollouts and Services
+kubectl get pods -n devtrack
+kubectl get svc -n devtrack
+```
+
+### C. Helm Chart Deployment
+```bash
+# 1. Lint the Helm chart
+helm lint helm/devtrack
+
+# 2. Deploy or upgrade the release
+helm upgrade --install devtrack helm/devtrack -n devtrack --create-namespace
+
+# 3. Check release status
+helm status devtrack -n devtrack
+```
+
 ### Accessing the Application
-* **Frontend Web Dashboard:** [http://localhost:3000](http://localhost:3000)
-* **FastAPI Interactive Docs (Swagger):** [http://localhost:8000/docs](http://localhost:8000/docs)
-* **Health Check Probe:** [http://localhost:8000/health](http://localhost:8000/health)
+* **Frontend Web Dashboard:** [http://localhost:3000](http://localhost:3000) (Docker Compose) or Ingress `/`
+* **FastAPI Interactive Docs (Swagger):** [http://localhost:8000/docs](http://localhost:8000/docs) or Ingress `/docs`
+* **Health Check Probe:** [http://localhost:8000/health](http://localhost:8000/health) or Ingress `/health`
 
 ### Stopping the Stack
 ```bash
-# Stop containers (preserves database volume data)
+# Docker Compose:
 docker compose down
 
-# Stop containers AND wipe database volume (clean reset)
-docker compose down -v
+# Kubernetes:
+kubectl delete -k k8s/
+# or via Helm:
+helm uninstall devtrack -n devtrack
 ```
 
 ---

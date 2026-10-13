@@ -385,3 +385,61 @@ All workloads target the dedicated `devtrack` namespace and pull verified OCI im
   - Mounted volume at `/var/lib/postgresql/data` with `subPath: postgres`.
   - Health probes using `pg_isready -U postgres -d devtrack` for liveness and readiness.
   - ClusterIP service exposing port 5432 resolving `devtrack-postgres:5432` internally for backend Pods.
+
+### Module 5.4 — Ingress Routing & Declarative Manifest Management
+- **Unified Ingress Entrypoint (`k8s/ingress.yaml`)**:
+  - `ingressClassName: nginx` standard routing for Kubernetes Ingress Controllers.
+  - Path-based routing:
+    - `/` (Prefix) $\rightarrow$ Service `devtrack-frontend` on port 80 (React web application).
+    - `/api` (Prefix) $\rightarrow$ Service `devtrack-backend` on port 8000 (FastAPI REST endpoints).
+    - `/docs` (Prefix) & `/openapi.json` (Exact) $\rightarrow$ Service `devtrack-backend` on port 8000 (Interactive API documentation).
+- **Declarative Kustomization (`k8s/kustomization.yaml`)**:
+  - Manages the complete resource manifest set across namespace, configs, secrets, PVC, stateful database, stateless API, and UI in proper dependency sequence.
+  - Validated offline via `kubectl kustomize k8s/` exiting with status code 0.
+
+### Module 5.5 — Helm Chart Packaging & Templating (`helm/devtrack`)
+- **Chart Architecture**:
+  - `helm/devtrack/Chart.yaml` defining chart version `0.1.0` and application version `1.0.0`.
+  - `helm/devtrack/values.yaml` centralizing environment, replica counts, image tags, service ports, resource allocations, and ingress annotations.
+  - `helm/devtrack/templates/_helpers.tpl` generating standardized Kubernetes labels (`helm.sh/chart`, `app.kubernetes.io/managed-by: Helm`, `app.kubernetes.io/part-of: devtrack`).
+- **Templated Workloads**:
+  - `templates/namespace.yaml`: Conditional or configurable namespace creation.
+  - `templates/configmap.yaml` & `templates/secret.yaml`: Parameterized application runtime configuration and credentials.
+  - `templates/postgres-pvc.yaml`, `postgres-deployment.yaml`, `postgres-service.yaml`: Persistent database stack with configurable storage and resource limits.
+  - `templates/backend-deployment.yaml` & `backend-service.yaml`: 2-replica API deployment with probes and resource requests/limits.
+  - `templates/frontend-deployment.yaml` & `frontend-service.yaml`: 2-replica UI deployment with probes and non-root security context.
+  - `templates/ingress.yaml`: Flexible path-based Ingress routing with configurable annotations.
+- **Verification**:
+  - `helm lint helm/devtrack`: 0 chart(s) failed (`PASS`).
+  - `helm template devtrack helm/devtrack`: Cleanly rendered all 11 Kubernetes manifests (`PASS`).
+  - `helm package helm/devtrack -d helm/`: Successfully packaged release archive `helm/devtrack-0.1.0.tgz`.
+
+### Module 5.6 — Health Probes, Rolling Updates & Troubleshooting Guide
+- **Rolling Update Mechanics**:
+  - `maxSurge: 1`, `maxUnavailable: 0` ensures zero-downtime rolling deployments by spinning up a new container and validating its readiness probe before terminating an old instance.
+  - PostgreSQL uses `strategy: Recreate` to avoid ReadWriteOnce PVC volume lock contentions.
+- **Probe Timing & Thresholds**:
+  - Backend Liveness (`GET /health`): `initialDelaySeconds: 15`, `periodSeconds: 10`, `timeoutSeconds: 3`, `failureThreshold: 3`.
+  - Backend Readiness (`GET /ready`): `initialDelaySeconds: 5`, `periodSeconds: 5`, `timeoutSeconds: 2`, `failureThreshold: 2`.
+  - Frontend Probes (`GET /`): `initialDelaySeconds: 10` (liveness), `5` (readiness).
+  - Postgres Probes (`exec: pg_isready -U postgres -d devtrack`): `initialDelaySeconds: 15` (liveness), `5` (readiness).
+- **Kubernetes Diagnostic Workflow**:
+  - Rollout tracking: `kubectl rollout status deployment/devtrack-backend -n devtrack`.
+  - Rollback capability: `kubectl rollout undo deployment/devtrack-backend -n devtrack`.
+  - Crash diagnosis: `kubectl describe pod <pod-name> -n devtrack` and `kubectl logs <pod-name> -n devtrack --previous`.
+
+### Module 5.7 — Phase 5 Capstone Rubric Audit Table
+
+| Rubric Requirement | Status | Verification & Evidence |
+| :--- | :---: | :--- |
+| **1. Dedicated Namespace** | ✅ Verified | `k8s/namespace.yaml` defines `devtrack` with standard Kubernetes labels. |
+| **2. Multi-Replica Backend Workload** | ✅ Verified | `k8s/backend-deployment.yaml` specifies `replicas: 2`, `RollingUpdate` (`maxSurge: 1`, `maxUnavailable: 0`), non-root UID 1000, CPU/memory requests & limits, and liveness/readiness probes. |
+| **3. Backend Service Exposure** | ✅ Verified | `k8s/backend-service.yaml` provides internal `ClusterIP` on port 8000. |
+| **4. Multi-Replica Frontend Workload** | ✅ Verified | `k8s/frontend-deployment.yaml` specifies `replicas: 2`, unprivileged port 8080, non-root UID 101, and liveness/readiness probes. |
+| **5. Frontend Service Exposure** | ✅ Verified | `k8s/frontend-service.yaml` provides internal `ClusterIP` on port 80 routing to container targetPort 8080. |
+| **6. Stateful Database & Persistence** | ✅ Verified | `k8s/postgres-pvc.yaml` claims 1Gi RWO volume; `k8s/postgres-deployment.yaml` mounts volume with `strategy: Recreate` and `pg_isready` probes; `k8s/postgres-service.yaml` exposes port 5432. |
+| **7. Configuration & Secrets Hygiene** | ✅ Verified | `k8s/configmap.yaml` separates non-sensitive environment keys; `k8s/secret.example.yaml` provides safe template; real secrets excluded via `.gitignore`. |
+| **8. Ingress Path-Based Routing** | ✅ Verified | `k8s/ingress.yaml` routes `/` $\rightarrow$ `devtrack-frontend:80`, and `/api`, `/docs`, `/openapi.json` $\rightarrow$ `devtrack-backend:8000`. |
+| **9. Reusable Helm Chart** | ✅ Verified | `helm/devtrack` includes `Chart.yaml`, `values.yaml`, `_helpers.tpl`, and complete templates. Passed `helm lint` and `helm template`. Packaged into `helm/devtrack-0.1.0.tgz`. |
+| **10. Security Hardening** | ✅ Verified | All application workloads enforce `runAsNonRoot: true`, unprivileged user IDs, and `allowPrivilegeEscalation: false`. |
+
