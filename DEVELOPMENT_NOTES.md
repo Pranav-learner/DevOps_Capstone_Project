@@ -743,6 +743,45 @@ Dashboard titled **`DevTrack — Application Observability & Performance`** incl
 - **Dashboard Structure Inspection (`/api/dashboards/uid/devtrack-app-overview`)**:
   - Verified all 8 monitoring panels and 3 section rows loaded cleanly with zero missing datasource references (`PASS`).
 
+### Module 7.5 — Generate Safe Traffic & Validate Live Metrics
+
+#### 1. Safe Traffic Simulation
+- **Traffic Execution**: Executed automated request simulation directly against `http://devtrack-backend.devtrack.svc.cluster.local:8000`:
+  - Liveness & Readiness: 15x `GET /health`, 15x `GET /ready`, 15x `GET /` (HTTP 200).
+  - Issue Lifecycle CRUD:
+    - 5x `POST /api/issues` (HTTP 201 Created — Issue IDs: `[3, 4, 5, 6, 7]`).
+    - 15x `GET /api/issues` (HTTP 200).
+    - 15x `GET /api/issues/stats` (HTTP 200).
+    - 15x `GET /api/issues/{id}` (HTTP 200).
+    - 3x `PUT /api/issues/{id}` (HTTP 200 Updated status).
+    - 2x `DELETE /api/issues/{id}` (HTTP 204 Deleted).
+  - Synthetic Client Error Testing: 6x `GET /api/issues/999999` (HTTP 404 Not Found).
+  - Total Dispatched: ~120 safe application requests.
+
+#### 2. Prometheus Metric Ingestion Verification
+- **Endpoint Vector Breakdown (`/api/v1/query`)**:
+  - `/ready` [200]: 199 requests
+  - `/health` [200]: 102 requests
+  - `/metrics` [200]: 28 requests
+  - `/` [200]: 11 requests
+  - `/api/issues` [201]: 4 requests
+  - `/api/issues` [200]: 7 requests
+  - `/api/issues/stats` [200]: 6 requests
+  - `/api/issues/{id}` [200]: 42 requests
+  - `/api/issues/{id}` [404]: 4 requests
+- **Cumulative Traffic**:
+  - `sum(devtrack_http_requests_total{job="devtrack-backend"})` = **418 requests recorded**.
+
+#### 3. Live Grafana Panel Population
+- **Datasource Query Probe (`/api/datasources/proxy/uid/PBFA97CFB590B2093/api/v1/query`)**:
+  - Query: `sum(devtrack_http_requests_total{job="devtrack-backend"})`
+  - Result: Returned status `"success"` with vector value `418` (`PASS`).
+- **Operational Metrics**:
+  - `Backend Availability`: 100% (Green stat panel).
+  - `Error Rate (5xx)`: 0.0% (Green stat panel).
+  - `Application Version`: Displaying `0.1.0`.
+  - `HTTP Request Rate & Latency`: Time series graphs populated across active routes.
+
 
 
 
