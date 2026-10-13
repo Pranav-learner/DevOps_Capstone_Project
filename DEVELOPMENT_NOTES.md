@@ -674,6 +674,44 @@ Executed against live Amazon EKS cluster in `ap-southeast-2` (DevTrack namespace
   - `service/prometheus`: ClusterIP `172.20.232.239:9090/TCP`.
   - `service/grafana`: ClusterIP `172.20.180.164:3000/TCP`.
 
+### Module 7.3 — Configure Application Scraping & Live Target Verification
+
+#### 1. GitOps Automated Rollout
+- **CI/CD Image Build & Security Scan**:
+  - GitHub Actions Run 23 succeeded on commit `76f54cc` (2m 11s duration).
+  - Pytest suite, frontend build, Docker buildx push, and Trivy security scans all passed with 0 High/Critical CVEs.
+  - Published immutable container image: `ghcr.io/pranav-learner/devtrack-backend:76f54ccb83397b3c8dd91bca5b76a1df7aa35934`.
+- **Declarative Values Update**:
+  - Updated `backend.image.tag` and `frontend.image.tag` to `76f54ccb83397b3c8dd91bca5b76a1df7aa35934` in `helm/devtrack/values.yaml`.
+  - ArgoCD reconciled and rolled out the deployment without downtime (`deployment "devtrack-backend" successfully rolled out`).
+  - Active backend pods running the new image:
+    - `devtrack-backend-fbf66c475-fhgrd`: `Running`
+    - `devtrack-backend-fbf66c475-rscr5`: `Running`
+
+#### 2. Prometheus Target Health & Live Scraping Evidence
+- **Prometheus Scraper Endpoint**:
+  - Direct cluster probe (`wget -qO- http://devtrack-backend.devtrack.svc.cluster.local:8000/metrics`) confirmed raw Prometheus text exposition with standard metrics (`devtrack_http_requests_total`, `devtrack_http_request_duration_seconds`, `devtrack_app_info`, process metrics).
+- **Target Health (`/api/v1/targets`)**:
+  - **`devtrack-backend` Target**:
+    - Discovered Address: `devtrack-backend.devtrack.svc.cluster.local:8000`
+    - Health Status: **`up`** ✅
+    - Last Error: `""` (None)
+    - Scrape Interval: `15s`
+    - Scrape Duration: `0.0138s`
+  - **`prometheus` Self Target**:
+    - Discovered Address: `localhost:9090`
+    - Health Status: **`up`** ✅
+- **Instant Metric Vector Queries (`/api/v1/query`)**:
+  - Query `up`: Returned vector with `{"app":"devtrack-backend","instance":"devtrack-backend.devtrack.svc.cluster.local:8000","job":"devtrack-backend"} => 1` (`PASS`).
+  - Query `devtrack_app_info`: Returned vector `{"app":"devtrack-backend","version":"0.1.0"} => 1` (`PASS`).
+
+#### 3. Grafana Datasource Verification
+- **Datasource Provisioning**:
+  - Grafana API verified datasource `Prometheus` (UID: `PBFA97CFB590B2093`) configured as default proxying to `http://prometheus.monitoring.svc.cluster.local:9090`.
+- **Datasource Proxy Query**:
+  - Queried Prometheus via Grafana proxy (`/api/datasources/proxy/uid/PBFA97CFB590B2093/api/v1/query?query=up`).
+  - Status returned: `"success"` with metric vectors populated (`PASS`).
+
 
 
 
