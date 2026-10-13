@@ -519,4 +519,40 @@ Executed against live Amazon EKS cluster in `ap-southeast-2` (DevTrack namespace
 - **Ingress Manifest**: `k8s/ingress.yaml` and Helm template are syntactically valid and applied (`PASS`).
 - **Prerequisite / Cloud Cost Blocker**: An Ingress Controller (e.g., `ingress-nginx`) provisioned with a cloud-facing Load Balancer incurs additional AWS ELB hourly costs (~$16/month). Per execution rules, ELB provisioning is held pending explicit user cost approval.
 
+## Phase 6 — ArgoCD & GitOps Implementation (In Progress)
+
+### Module 6.1 — Preflight Discovery, Capacity Assessment & Safe Adoption Plan
+
+#### 1. Repository & Tooling Baseline
+- **Git State**: Local `main` is clean and fully synchronized with `origin/main` at commit `eb3f50b`.
+- **Primary GitOps Source**: `helm/devtrack` is selected as the authoritative single source of truth for all Kubernetes resources.
+- **Image Strategy**: Pinned immutable full Git SHA tags (`bb56f13b43164745584512374d5e1f66cbdf75b6`).
+
+#### 2. Live EKS Cluster & Compatibility Assessment
+- **Cluster**: `devtrack-eks-cluster` in AWS region `ap-southeast-2` (Status: `ACTIVE`).
+- **Kubernetes Version**: `v1.30.14-eks-bca9cf6` (Supported standard release; fully compatible with ArgoCD v2.10–v2.13).
+- **Worker Nodes**: 2x `t3.medium` EC2 instances (`ip-10-0-10-155` and `ip-10-0-11-119`) both in `Ready` status.
+- **Node Allocations & Capacity**:
+  - Node 1 CPU: 590m requested (30% allocated, ~70% free); Memory: 726Mi (22% allocated, ~78% free).
+  - Node 2 CPU: 490m requested (25% allocated, ~75% free); Memory: 598Mi (18% allocated, ~82% free).
+  - **Assessment**: The cluster possesses ~2780m CPU and ~5000Mi RAM free, providing ample headroom for ArgoCD (~500m CPU / ~1.2Gi RAM) without scaling the node group or increasing AWS costs.
+
+#### 3. Live Workload Verification vs. Helm Declarations
+- **Namespace**: `devtrack`
+- **Workloads Active**:
+  - `devtrack-backend`: 2/2 replicas running across distinct worker nodes.
+  - `devtrack-frontend`: 2/2 replicas running across distinct worker nodes.
+  - `devtrack-postgres`: 1/1 replica running with `strategy: Recreate`.
+  - `devtrack-postgres-pvc`: `Bound` to AWS EBS volume `pvc-c43c306e-5088-40a6-986a-92d40efa8ed1` (1Gi, `gp2`).
+- **Discrepancy Audit**: Comparison between `helm template devtrack helm/devtrack --namespace devtrack` and live Kubernetes resources confirms 100% naming, selector, port, and volume alignment.
+
+#### 4. Safe Adoption Strategy (Zero Data Loss Guarantee)
+- **Data Protection**: `devtrack-postgres-pvc` references the identical volume claim name, access mode (`ReadWriteOnce`), storage class (`gp2`), and storage size (`1Gi`).
+- **Sync Guardrails**:
+  - Automated pruning (`prune: false`) disabled initially to prevent accidental resource deletion.
+  - Automated self-healing (`selfHeal: false`) disabled initially to allow manual inspection of the diff prior to synchronization.
+  - Manual sync adopted to establish ArgoCD resource tracking metadata smoothly.
+- **Cost & Access Model**: ArgoCD UI will be accessed exclusively via `kubectl port-forward` to avoid creating costly public cloud Load Balancers.
+
+
 
