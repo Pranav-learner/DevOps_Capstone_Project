@@ -9,7 +9,7 @@ namespace:
   name: "devtrack"
 
 frontend:
-  replicaCount: 2
+  replicaCount: 3
   image:
     repository: "ghcr.io/pranav-learner/devtrack-frontend"
     tag: "bb56f13b43164745584512374d5e1f66cbdf75b6"
