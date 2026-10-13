@@ -1,14 +1,16 @@
 import enum
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, Enum, func
+from sqlalchemy import String, Text, DateTime, Enum, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 
 class IssueStatus(str, enum.Enum):
+    BACKLOG = "BACKLOG"
     TODO = "TODO"
     IN_PROGRESS = "IN_PROGRESS"
-    REVIEW = "REVIEW"
+    IN_REVIEW = "IN_REVIEW"
+    REVIEW = "REVIEW"  # Backward compatibility alias
     DONE = "DONE"
 
 
@@ -31,12 +33,12 @@ class Issue(Base):
 
     # Status & Priority using Enums
     status: Mapped[IssueStatus] = mapped_column(
-        Enum(IssueStatus, native_enum=False),
+        Enum(IssueStatus, native_enum=False, length=50),
         default=IssueStatus.TODO,
         nullable=False,
     )
     priority: Mapped[IssuePriority] = mapped_column(
-        Enum(IssuePriority, native_enum=False),
+        Enum(IssuePriority, native_enum=False, length=50),
         default=IssuePriority.MEDIUM,
         nullable=False,
     )
@@ -44,6 +46,17 @@ class Issue(Base):
     # Project and Assignee tracking
     project: Mapped[str] = mapped_column(String(100), default="DevTrack", nullable=False)
     assignee: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # Due date & Labels
+    due_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    labels: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+        default=list,
+    )
 
     # Automatic audit timestamps
     created_at: Mapped[datetime] = mapped_column(
