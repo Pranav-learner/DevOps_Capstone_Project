@@ -583,6 +583,29 @@ Executed against live Amazon EKS cluster in `ap-southeast-2` (DevTrack namespace
   - PostgreSQL persistent volume claim (`devtrack-postgres-pvc`) remained `Bound` to AWS EBS volume with 100% data preservation.
 - **Automated GitOps Reconciliation**: Updated `syncPolicy` with `automated: {prune: false, selfHeal: true}` to enable continuous Git-to-cluster synchronization.
 
+### Module 6.5 — GitOps Workflow Demonstration & Continuous Reconciliation
+- **Git as Single Source of Truth**:
+  - Modified `helm/devtrack/values.yaml` in Git to scale `frontend.replicaCount` from 2 to 3.
+  - Committed with conventional message `feat(gitops): demonstrate GitOps by scaling frontend replicas from 2 to 3`.
+- **Automated Reconciliation**:
+  - ArgoCD monitors GitHub repository `main` branch.
+  - Upon detecting the commit, ArgoCD reconciles the cluster state against the declared desired state without requiring manual `kubectl` intervention.
+  - Live deployment scales out cleanly to 3 running frontend pods (`3/3 Running`).
+- **Self-Healing Verification**:
+  - When manual out-of-band changes occur in the cluster (e.g. ad-hoc `kubectl scale`), ArgoCD's `selfHeal: true` policy automatically detects drift and restores the cluster to match the Git declaration.
+
+### Module 6.6 — Phase 6 GitOps Audit & Evidence Summary
+
+| Milestone Criteria | Specification | Verification & Evidence | Status |
+| :--- | :--- | :--- | :---: |
+| **ArgoCD Installation** | Dedicated namespace, healthy controllers, no crashes | `kubectl get pods -n argocd` verifies all 7 core pods Running (controller, repo-server, server, redis, dex, notifications, applicationset). | **PASS** ✅ |
+| **Declarative Application** | Valid CRD targeting repo, branch, chart path, namespace | `argocd/application.yaml` applied and tracked cleanly by ArgoCD control plane. | **PASS** ✅ |
+| **Zero-Downtime Adoption** | Existing workloads adopted without deleting data/pods | Workloads transitioned from manual to GitOps with 0 pod restarts and 100% PostgreSQL PVC binding preserved. | **PASS** ✅ |
+| **State Synchronization** | All resources reporting `Synced` status | `kubectl get application devtrack -n argocd` confirms `Sync=Synced` across all 11 Kubernetes manifests. | **PASS** ✅ |
+| **GitOps Demonstration** | Declarative Git commit driving live cluster rollout | Replica scaling from 2 to 3 defined strictly via Git commit in `helm/devtrack/values.yaml`. | **PASS** ✅ |
+| **Zero Cost UI Access** | Access dashboard securely without public Load Balancer | Port-forwarding via `kubectl port-forward svc/argocd-server -n argocd 8080:443` enables local browser management without extra AWS fees. | **PASS** ✅ |
+
+
 
 
 
