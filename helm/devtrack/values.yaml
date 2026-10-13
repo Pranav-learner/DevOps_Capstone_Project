@@ -12,7 +12,7 @@ frontend:
   replicaCount: 3
   image:
     repository: "ghcr.io/pranav-learner/devtrack-frontend"
-    tag: "bb56f13b43164745584512374d5e1f66cbdf75b6"
+    tag: "76f54ccb83397b3c8dd91bca5b76a1df7aa35934"
     pullPolicy: "IfNotPresent"
   service:
     type: "ClusterIP"
@@ -30,7 +30,7 @@ backend:
   replicaCount: 2
   image:
     repository: "ghcr.io/pranav-learner/devtrack-backend"
-    tag: "bb56f13b43164745584512374d5e1f66cbdf75b6"
+    tag: "76f54ccb83397b3c8dd91bca5b76a1df7aa35934"
     pullPolicy: "IfNotPresent"
   service:
     type: "ClusterIP"
