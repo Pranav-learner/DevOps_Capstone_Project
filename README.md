@@ -123,6 +123,15 @@ Our automated CI/CD pipeline runs on every push and pull request to `main` via [
 
 ---
 
+### Phase 4 — Terraform & AWS Infrastructure (Underway)
+* **Infrastructure as Code (IaC):** Modular, production-ready Terraform configuration under [`terraform/`](terraform/) targeting AWS region `ap-south-1` (Mumbai).
+* **Resilient VPC Networking:** Custom VPC (`10.0.0.0/16`), 2 public subnets across distinct Availability Zones (`ap-south-1a`, `ap-south-1b`), 2 private subnets, Internet Gateway, NAT Gateway, route tables, and official Kubernetes discovery tags (`kubernetes.io/role/elb = 1`).
+* **Amazon EKS Cluster:** AWS-managed Kubernetes control plane pinned to version `1.30` with least-privilege cluster IAM roles.
+* **Managed Worker Node Group:** Auto-scaling `t3.medium` EC2 worker nodes deployed strictly in private subnets, isolated from direct internet ingress.
+* **Security & Lifecycle:** Hardened Security Groups with least-privilege ingress/egress rules, pod-to-pod networking, and validated with `terraform fmt`, `terraform init`, and `terraform validate`.
+
+---
+
 ## 4. Quick Start (Local Docker Compose)
 
 ### Prerequisites
