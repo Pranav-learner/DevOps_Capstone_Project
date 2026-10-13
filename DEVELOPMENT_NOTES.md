@@ -469,3 +469,54 @@ All workloads target the dedicated `devtrack` namespace and pull verified OCI im
 - **Database Migrations**: Alembic revision `149d7d96f47b` applied cleanly in the cloud database
 - **Data Persistence Verification**: Successfully created Issue #1 (`Deploy to AWS EKS`) via REST API and persisted to AWS EBS storage.
 
+### Module 5.8 — Full-Scope Audit, Live Integration Evidence & Final Rubric Verification
+
+#### 1. Deployment Source of Truth
+- **Intended Source of Truth**: The Helm Chart located under `helm/devtrack/` is designated as the primary deployment source of truth for DevTrack. It parameterizes all infrastructure variables (replicas, image tags, storage sizes, ingress annotations), while `k8s/` preserves the raw declarative Kustomize specifications.
+
+#### 2. Static & Manifest Validation Evidence
+- `kubectl kustomize k8s/`: Evaluated with exit code 0 (`PASS`). All 11 resources rendered without syntax or indentation defects.
+- `helm lint helm/devtrack`: 0 chart(s) failed (`PASS`).
+- `helm template devtrack helm/devtrack --namespace devtrack`: Successfully synthesized all templates into valid Kubernetes resources (`PASS`).
+- `git diff --check`: 0 whitespace or formatting anomalies detected (`PASS`).
+
+#### 3. Live Functional Integration Test Outcomes
+Executed against live Amazon EKS cluster in `ap-southeast-2` (DevTrack namespace):
+- **Health Check (`GET /health`)**: HTTP 200 `{"status":"healthy"}` (`PASS`).
+- **Readiness Check (`GET /ready`)**: HTTP 200 `{"status":"ready"}` verifying active PostgreSQL database connectivity (`PASS`).
+- **REST API Full CRUD Lifecycle**:
+  - `POST /api/issues`: HTTP 201 Created disposable issue (ID: 2, Title: `QA Audit Test Issue`) (`PASS`).
+  - `GET /api/issues/2`: HTTP 200 Read issue status `TODO` (`PASS`).
+  - `PUT /api/issues/2`: HTTP 200 Updated status to `IN_PROGRESS` (`PASS`).
+  - `DELETE /api/issues/2`: HTTP 204 Deleted issue successfully (`PASS`).
+  - `GET /api/issues/2`: HTTP 404 Verified clean record deletion (`PASS`).
+- **Frontend ClusterIP Service**: Internal resolution at `devtrack-frontend.devtrack.svc.cluster.local:80` returned HTTP 200 (458 bytes index HTML) (`PASS`).
+- **Image Pinning**: Live pods verify exact GHCR immutable Git commit SHA:
+  - `ghcr.io/pranav-learner/devtrack-backend:bb56f13b43164745584512374d5e1f66cbdf75b6` (`PASS`).
+  - `ghcr.io/pranav-learner/devtrack-frontend:bb56f13b43164745584512374d5e1f66cbdf75b6` (`PASS`).
+
+#### 4. Trivy Vulnerability Integration (M6 Remediation)
+- **Action**: Updated `.github/workflows/ci.yml` to integrate `aquasecurity/trivy-action@0.28.0` for both backend and frontend container images, configured with `exit-code: 1`, `severity: CRITICAL,HIGH`, and `ignore-unfixed: true`.
+- **Local Scan Verification**:
+  - `trivy image --severity HIGH,CRITICAL --ignore-unfixed ghcr.io/pranav-learner/devtrack-frontend:...`: 0 vulnerabilities detected (`PASS`).
+  - `trivy image --severity HIGH,CRITICAL --ignore-unfixed ghcr.io/pranav-learner/devtrack-backend:...`: 0 vulnerabilities detected (`PASS`).
+
+#### 5. Phases 0–5 Comprehensive Capstone Rubric Audit Table
+
+| Phase / Rubric Milestone | Description | Points | Status | Verification & Evidence |
+| :--- | :--- | :---: | :---: | :--- |
+| **Phase 0 — Setup & Secrets** | Tool prerequisites, .gitignore, clean history, zero leaked secrets | Req | **PASS** | `.gitignore` excludes `.env`, `*.tfstate`, `k8s/secret.yaml`. Zero credentials tracked. |
+| **Phase 1 (M1) — Application** | FastAPI REST API, PostgreSQL, Alembic migrations, React UI, Pytest | 10 | **PASS** | 3/3 Pytest passed (`2.18s`). Frontend build clean (`vite v8.3.3`). Live CRUD verified. |
+| **Phase 2 (M4) — Docker** | Multi-stage Dockerfiles, unprivileged non-root users, Docker Compose | 10 | **PASS** | Frontend non-root UID 101, Backend non-root UID 1000. Compose boots cleanly with healthchecks. |
+| **Phase 3 (M3) — Git & GitHub** | Clean commit history, meaningful conventional commits, PR workflows | 5 | **PASS** | GitHub repo active, conventional commits throughout, branch protected via CI. |
+| **Phase 3 (M5) — CI/CD Pipeline** | GitHub Actions testing, frontend build gating, GHCR publishing with Git SHA | 15 | **PASS** | `.github/workflows/ci.yml` runs parallel test gates, publishes immutable SHA tags. |
+| **Phase 3 (M6) — Trivy Security** | Image scanning blocking on HIGH/CRITICAL CVEs | 5 | **PASS** | Integrated into CI pipeline; local scan confirms 0 HIGH/CRITICAL vulnerabilities. |
+| **Phase 4 (M7) — Terraform & AWS** | Modular HCL, VPC (2 public, 2 private subnets), EKS, Node Group, live state | 15 | **PASS** | `terraform plan` & `apply` succeeded in `ap-southeast-2`. Live EKS cluster + 2 nodes active. |
+| **Phase 5 (M8) — Kubernetes & Helm** | 2-replica Deployments, Services, 1Gi PVC, Ingress, Helm chart, probes | 15 | **PASS** | All workloads live (1/1, 2/2, 2/2), PVC Bound (`gp2`), Helm lint/template passed. Ingress configured. |
+| **Phase 6+ — Future Work** | ArgoCD/GitOps, Prometheus & Grafana monitoring, Demo video | — | **NOT STARTED** | Reserved for future milestones; strictly excluded from Phase 5 scope. |
+
+#### 6. Ingress Controller Blocker Notice
+- **Ingress Manifest**: `k8s/ingress.yaml` and Helm template are syntactically valid and applied (`PASS`).
+- **Prerequisite / Cloud Cost Blocker**: An Ingress Controller (e.g., `ingress-nginx`) provisioned with a cloud-facing Load Balancer incurs additional AWS ELB hourly costs (~$16/month). Per execution rules, ELB provisioning is held pending explicit user cost approval.
+
+
