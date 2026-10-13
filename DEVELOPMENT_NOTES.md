@@ -803,6 +803,110 @@ Phase 7 has delivered an end-to-end cloud-native monitoring and observability ar
 | **Populated Application Metrics Panels** | At least one Grafana panel displays populated, live application metrics | 2 | DevTrack Observability Dashboard (`UID: devtrack-app-overview`) features 8 populated panels: Total HTTP Requests (418), Backend Availability (100%), Error Rate (0.0%), and live Request Rate & Latency time series. | **PASS** ✅ |
 | **Total Phase 7 Score** | **Full Milestone M9 Observability Requirements** | **10 / 10** | **All 5 rubric criteria verified with live cluster evidence and GitOps synchronization.** | **PASS** ✅ |
 
+## Phase 8 — Kubernetes Troubleshooting & Recovery
+
+### Module 8.1 — ImagePullBackOff Diagnosis & Recovery
+
+#### 1. Failure Injection (Isolated Namespace)
+- **Target Namespace**: Dedicated disposable namespace `troubleshooting-lab` (zero impact on `devtrack` production namespace).
+- **Injection Action**: Created disposable Pod `image-pull-test` with deliberately non-existent image reference:
+  `kubectl run image-pull-test --image=ghcr.io/pranav-learner/devtrack-backend:non-existent-tag-v999 --restart=Never -n troubleshooting-lab`
+
+#### 2. Symptom Triage & Root Cause Evidence
+- **Pod Status**:
+  ```text
+  NAME              READY   STATUS             RESTARTS   AGE
+  image-pull-test   0/1     ImagePullBackOff   0          53s
+  ```
+- **Event Log (`kubectl describe pod image-pull-test -n troubleshooting-lab`)**:
+  - `Warning Failed: Failed to pull image "ghcr.io/pranav-learner/devtrack-backend:non-existent-tag-v999": rpc error: code = NotFound desc = failed to pull and unpack image ...: not found`
+  - `Warning Failed: Error: ErrImagePull`
+  - `Normal BackOff: Back-off pulling image "ghcr.io/pranav-learner/devtrack-backend:non-existent-tag-v999"`
+  - `Warning Failed: Error: ImagePullBackOff`
+- **Root Cause**: The kubelet attempted to pull container image with tag `non-existent-tag-v999`, which does not exist in GHCR, causing the container runtime to return HTTP 404 (NotFound) and trigger exponential backoff.
+
+#### 3. Minimal Remediation & Recovery
+- **Correction Action**: Patched container image reference to known valid immutable tag:
+  `kubectl set image pod/image-pull-test image-pull-test=ghcr.io/pranav-learner/devtrack-backend:76f54ccb83397b3c8dd91bca5b76a1df7aa35934 -n troubleshooting-lab`
+- **Recovery Verification**:
+  ```text
+  NAME              READY   STATUS    RESTARTS   AGE
+  image-pull-test   1/1     Running   0          2m8s
+  ```
+  Events confirmed successful image pull (`Container image already present on machine`), container creation, and transition to `1/1 Running`.
+- **Cleanup**: Deleted disposable test pod via `kubectl delete pod image-pull-test -n troubleshooting-lab`.
+
+---
+
+### Module 8.2 — Service Selector Mismatch Diagnosis & Recovery
+
+#### 1. Failure Injection
+- **Workload**: Deployed disposable Deployment `test-workload` with pod labels `app=test-backend,tier=api`.
+- **Service**: Created ClusterIP Service `test-service` targeting mismatched selector `app=wrong-backend-label`.
+
+#### 2. Symptom Triage & Root Cause Evidence
+- **Service State**:
+  ```text
+  NAME           TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+  test-service   ClusterIP   172.20.255.183   <none>        8000/TCP   42s
+  ```
+- **Endpoints State (`kubectl get endpoints test-service -n troubleshooting-lab`)**:
+  ```text
+  NAME           ENDPOINTS   AGE
+  test-service   <none>      45s
+  ```
+- **EndpointSlice State (`kubectl get endpointslices -l kubernetes.io/service-name=test-service -n troubleshooting-lab`)**:
+  ```text
+  NAME                 ADDRESSTYPE   PORTS     ENDPOINTS   AGE
+  test-service-4mgjh   IPv4          <unset>   <unset>     48s
+  ```
+- **Label Comparison**:
+  - Pod Labels: `app=test-backend,pod-template-hash=7f9d7459c,tier=api`
+  - Service Selector: `{"app":"wrong-backend-label"}`
+- **Root Cause**: The Kubernetes Endpoint Controller queries Pods matching `.spec.selector`. Because no Pod possessed label `app=wrong-backend-label`, the controller generated an empty endpoint slice (`<none>`), causing all traffic to the Service's ClusterIP to fail.
+
+#### 3. Minimal Remediation & Connectivity Verification
+- **Correction Action**: Patched Service selector to match the Pod label `app=test-backend`:
+  `kubectl patch svc test-service -n troubleshooting-lab --type merge -p '{"spec":{"selector":{"app":"test-backend"}}}'`
+- **Immediate Endpoints Population**:
+  ```text
+  NAME           ENDPOINTS          AGE
+  test-service   10.0.10.211:8000   2m27s
+  ```
+- **In-Cluster Functional Connectivity Test**:
+  Executed probe against `http://test-service.troubleshooting-lab.svc.cluster.local:8000/health`:
+  - `HTTP Status: 200`
+  - `Body: {"status":"healthy"}` (`PASS`).
+- **Cleanup**: Deleted test deployment, service, and removed namespace `troubleshooting-lab`.
+
+---
+
+### Module 8.3 — Production Workloads Regression Verification
+
+Post-troubleshooting audit confirmed 100% stability across all production components:
+1. **DevTrack Workloads (`devtrack` namespace)**:
+   - `devtrack-backend` (2 replicas): `1/1 Running` (`PASS`).
+   - `devtrack-frontend` (3 replicas): `1/1 Running` (`PASS`).
+   - `devtrack-postgres`: `1/1 Running` (`PASS`).
+2. **Persistent Storage**:
+   - `devtrack-postgres-pvc`: Status **`Bound`** to AWS EBS volume `pvc-c43c306e-5088-40a6-986a-92d40efa8ed1` with zero data loss (`PASS`).
+3. **ArgoCD GitOps Health**:
+   - `devtrack` Application: `Synced` (`PASS`).
+   - `devtrack-monitoring` Application: `Synced` / `Healthy` (`PASS`).
+4. **Monitoring & Metrics Collection**:
+   - Prometheus scrape target `devtrack-backend`: `up == 1` (`PASS`).
+   - Grafana live query `sum(devtrack_http_requests_total{job="devtrack-backend"})`: Evaluated to **`1207` requests** populated live (`PASS`).
+
+---
+
+### Module 8.4 — Troubleshooting Milestone Audit Table
+
+| Scenario | Injected Defect | Observed Symptoms | Root Cause | Remediation | Outcome | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :---: |
+| **ImagePullBackOff** | Invalid image tag `non-existent-tag-v999` | Pod in `ImagePullBackOff`, `ErrImagePull`, Kubelet NotFound event | Registry tag does not exist in GHCR | `kubectl set image` to valid tag `76f54cc...` | Pod transitioned to `1/1 Running` | **PASS** ✅ |
+| **Service Selector Mismatch** | Service selector `app=wrong-backend-label` | Service exists with `<none>` endpoints, 0 routing endpoints | Selector labels do not match pod labels | `kubectl patch svc` selector to `app=test-backend` | Endpoints populated (`10.0.10.211:8000`), HTTP 200 connectivity verified | **PASS** ✅ |
+| **Production Regression** | Troubleshooting tests run in isolated namespace | None; production workloads completely untouched | Zero impact on production resources | Ephemeral namespace `troubleshooting-lab` deleted | DevTrack, PostgreSQL PVC, ArgoCD, Prometheus, and Grafana remain 100% healthy | **PASS** ✅ |
+
 
 
 
