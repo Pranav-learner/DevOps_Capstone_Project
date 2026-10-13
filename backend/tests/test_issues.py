@@ -61,3 +61,14 @@ def test_issue_lifecycle_crud():
     # 7. Confirm 404 after deletion
     verify_deleted = client.get(f"/api/issues/{issue_id}")
     assert verify_deleted.status_code == 404
+
+
+def test_metrics_endpoint():
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    assert "text/plain" in response.headers.get("content-type", "")
+    content = response.text
+    assert "devtrack_http_requests_total" in content
+    assert "devtrack_http_request_duration_seconds" in content
+    assert "devtrack_app_info" in content
+    assert "process_cpu_seconds_total" in content

@@ -635,6 +635,45 @@ Executed against live Amazon EKS cluster in `ap-southeast-2` (DevTrack namespace
 - **Cost & Access Model**:
   - Internal ClusterIP services only; access strictly via `kubectl port-forward` (Prometheus `:9090`, Grafana `:3000`). Zero external Load Balancers or extra AWS cloud fees.
 
+### Module 7.2 — Deploy Monitoring & Backend Instrumentation
+
+#### 1. Backend Prometheus Instrumentation
+- **Dependencies**: Added `prometheus-client>=0.21.0` to `backend/requirements.txt`.
+- **Metrics Implemented (`backend/app/main.py`)**:
+  - `devtrack_http_requests_total`: Counter tracking `method`, normalized `endpoint` (e.g. `/api/issues/{issue_id}` to prevent high-cardinality label explosion), and `status_code`.
+  - `devtrack_http_request_duration_seconds`: Latency Histogram tracking execution time per endpoint across granular duration buckets (`0.005s` to `10.0s`).
+  - `devtrack_app_info`: Metadata Gauge with app identity and semantic version (`app="devtrack-api"`, `version="0.1.0"`).
+  - Default Python runtime and OS process metrics (`process_cpu_seconds_total`, `process_resident_memory_bytes`, `process_virtual_memory_bytes`, `process_open_fds`, `python_gc_*`).
+  - Standard Prometheus exposition format served on `/metrics` with `text/plain; version=1.0.0; charset=utf-8`.
+- **Automated Pytest Suite**:
+  - Added `test_metrics_endpoint()` in `backend/tests/test_issues.py`.
+  - Executed local pytest suite: **4 passed in 1.78s (100% PASS)**.
+
+#### 2. Declarative Monitoring Manifests (`monitoring/`)
+- **Namespace (`monitoring/namespace.yaml`)**: Created isolated `monitoring` namespace.
+- **Prometheus Scrape Configuration (`monitoring/prometheus-configmap.yaml`)**:
+  - Defined `scrape_configs` with 15s evaluation and scrape intervals.
+  - Target 1: `devtrack-backend.devtrack.svc.cluster.local:8000` on `/metrics`.
+  - Target 2: `localhost:9090` (Prometheus self-monitoring).
+- **Prometheus Server (`monitoring/prometheus.yaml`)**:
+  - Deployment with image `prom/prometheus:v2.54.1`, requests: `50m` CPU / `128Mi` RAM, limits: `250m` CPU / `384Mi` RAM.
+  - Ephemeral emptyDir storage with 24-hour retention time.
+  - Internal ClusterIP Service exposing port `9090`.
+- **Grafana Server & Datasource Auto-Provisioning (`monitoring/grafana.yaml`)**:
+  - Deployment with image `grafana/grafana:11.2.0`, requests: `50m` CPU / `128Mi` RAM, limits: `200m` CPU / `256Mi` RAM.
+  - Auto-provisioned datasource ConfigMap linking Prometheus (`http://prometheus.monitoring.svc.cluster.local:9090`).
+  - Internal ClusterIP Service exposing port `3000`.
+- **GitOps Declarative Application (`argocd/monitoring-application.yaml`)**:
+  - Registered `devtrack-monitoring` Application pointing to `monitoring/` directory in repository.
+
+#### 3. Live Cluster Verification
+- **Pod Status (`kubectl get pods -n monitoring`)**:
+  - `pod/prometheus-78bbfcbbc4-zxqfk`: `1/1 Running` (TSDB started, configuration loaded successfully).
+  - `pod/grafana-574647dd97-s27bj`: `1/1 Running` (Datasource inserted, HTTP server listening on port 3000).
+- **Service Endpoints (`kubectl get svc -n monitoring`)**:
+  - `service/prometheus`: ClusterIP `172.20.232.239:9090/TCP`.
+  - `service/grafana`: ClusterIP `172.20.180.164:3000/TCP`.
+
 
 
 
