@@ -712,6 +712,37 @@ Executed against live Amazon EKS cluster in `ap-southeast-2` (DevTrack namespace
   - Queried Prometheus via Grafana proxy (`/api/datasources/proxy/uid/PBFA97CFB590B2093/api/v1/query?query=up`).
   - Status returned: `"success"` with metric vectors populated (`PASS`).
 
+### Module 7.4 — Build DevTrack Dashboard in Grafana
+
+#### 1. Declarative Dashboard Provisioning
+- **Architecture**:
+  - `monitoring/grafana-dashboard.yaml`: Created ConfigMaps for dashboard provider (`grafana-dashboards-provider`) and JSON dashboard (`grafana-dashboard-devtrack`).
+  - `monitoring/grafana.yaml`: Mounted provider to `/etc/grafana/provisioning/dashboards` and JSON definition to `/etc/grafana/provisioning/dashboards-json`.
+  - Reconciled via GitOps commit `7073b21` managed by ArgoCD `devtrack-monitoring` Application.
+
+#### 2. Dashboard Panel Specifications (`UID: devtrack-app-overview`)
+Dashboard titled **`DevTrack — Application Observability & Performance`** includes 8 panels organized into logical operational rows:
+- **System Health & Overview**:
+  - `Backend Availability` (Stat): `avg(up{job="devtrack-backend"}) * 100` (%) with strict 100% green thresholds.
+  - `Total HTTP Requests` (Stat): `sum(devtrack_http_requests_total{job="devtrack-backend"}) or vector(0)`.
+  - `Error Rate (5xx)` (Stat): 5xx error percentage calculation with warning/critical color states.
+  - `Application Version` (Stat): Dynamic version display from `devtrack_app_info`.
+- **HTTP Traffic & Latency Performance**:
+  - `HTTP Request Rate by Endpoint` (TimeSeries): `sum(rate(devtrack_http_requests_total{job="devtrack-backend"}[1m])) by (endpoint, status_code)` (req/s).
+  - `P95 Request Latency by Endpoint` (TimeSeries): `histogram_quantile(0.95, sum(rate(devtrack_http_request_duration_seconds_bucket{job="devtrack-backend"}[1m])) by (le, endpoint))` (seconds).
+- **Runtime Resource Utilization**:
+  - `Process Resident Memory (RSS)` (TimeSeries): `sum(process_resident_memory_bytes{job="devtrack-backend"}) by (instance)` (bytes).
+  - `Process CPU Usage Rate` (TimeSeries): `sum(rate(process_cpu_seconds_total{job="devtrack-backend"}[1m])) by (instance)`.
+
+#### 3. Live Dashboard Verification
+- **Grafana API Search Probe (`/api/search`)**:
+  - Confirmed dashboard registration under folder `DevTrack`:
+    ```json
+    {"id":2,"uid":"devtrack-app-overview","title":"DevTrack — Application Observability & Performance","type":"dash-db","tags":["devtrack","fastapi","observability"]}
+    ```
+- **Dashboard Structure Inspection (`/api/dashboards/uid/devtrack-app-overview`)**:
+  - Verified all 8 monitoring panels and 3 section rows loaded cleanly with zero missing datasource references (`PASS`).
+
 
 
 
