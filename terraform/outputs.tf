@@ -1,0 +1,44 @@
+output "aws_region" {
+  description = "Target AWS region for DevTrack infrastructure"
+  value       = var.aws_region
+}
+
+output "environment" {
+  description = "Deployment environment name"
+  value       = var.environment
+}
+
+output "cluster_name" {
+  description = "Configured Amazon EKS cluster name"
+  value       = var.cluster_name
+}
+
+output "vpc_id" {
+  description = "The ID of the DevTrack VPC"
+  value       = aws_vpc.devtrack.id
+}
+
+output "vpc_cidr_block" {
+  description = "The CIDR block of the DevTrack VPC"
+  value       = aws_vpc.devtrack.cidr_block
+}
+
+output "public_subnet_ids" {
+  description = "List of IDs of the public subnets"
+  value       = aws_subnet.public[*].id
+}
+
+output "private_subnet_ids" {
+  description = "List of IDs of the private subnets"
+  value       = aws_subnet.private[*].id
+}
+
+output "cluster_security_group_id" {
+  description = "Security group ID for the EKS control plane"
+  value       = aws_security_group.cluster.id
+}
+
+output "node_security_group_id" {
+  description = "Security group ID for the EKS worker nodes"
+  value       = aws_security_group.node.id
+}

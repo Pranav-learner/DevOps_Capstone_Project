@@ -23,3 +23,15 @@ dist-ssr/
 .idea/
 .DS_Store
 *.swp
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.*
+crash.log
+crash.*.log
+terraform.tfvars
+*.auto.tfvars
+!terraform.tfvars.example

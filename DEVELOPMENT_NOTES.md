@@ -160,5 +160,125 @@ docker compose down -v
 | **6. Publish to GHCR** | Both images pushed to `ghcr.io` | ✅ Verified | Published to `ghcr.io/pranav-learner/devtrack-*` |
 | **7. Immutable SHA Tags** | Image tags use Git commit SHA (not just `latest`) | ✅ Verified | Tagged with `${{ github.sha }}` and `latest` in GHCR |
 
+## Phase 4 — Terraform & AWS Infrastructure (Underway)
+
+### Overview & High-Level Architecture
+In Phase 4, we provision the production cloud infrastructure for DevTrack on Amazon Web Services (AWS) using Terraform (Infrastructure as Code - IaC).
+The target environment consists of:
+- **Virtual Private Cloud (VPC)** in `ap-south-1` (Mumbai) spanning two Availability Zones (`ap-south-1a`, `ap-south-1b`).
+- **Subnet Topology**: Public subnets (with Internet Gateway) and Private subnets (for EKS worker nodes).
+- **Elastic Kubernetes Service (EKS)**: AWS-managed control plane with managed node groups (EC2 instances).
+- **IAM Security**: Dedicated least-privilege IAM roles for the EKS cluster and node groups.
+
+```text
+                               AWS Cloud (Region: ap-south-1)
+ ┌────────────────────────────────────────────────────────────────────────────────────────┐
+ │ Virtual Private Cloud (VPC: 10.0.0.0/16)                                               │
+ │                                                                                        │
+ │  Availability Zone 1 (ap-south-1a)                 Availability Zone 2 (ap-south-1b)   │
+ │ ┌───────────────────────────────────────┐         ┌──────────────────────────────────┐ │
+ │ │ Public Subnet A (10.0.1.0/24)         │         │ Public Subnet B (10.0.2.0/24)    │ │
+ │ │  • Ingress / ALBs                     │         │  • Ingress / ALBs                │ │
+ │ └───────────────────┬───────────────────┘         └──────────────────┬───────────────┘ │
+ │                     │                                                │                 │
+ │                     └───────────────────────┬────────────────────────┘                 │
+ │                                             ▼                                          │
+ │                                [Internet Gateway (IGW)]                                │
+ │                                             ▲                                          │
+ │                                             │                                          │
+ │ ┌───────────────────────────────────────┐   │     ┌──────────────────────────────────┐ │
+ │ │ Private Subnet A (10.0.10.0/24)       │   │     │ Private Subnet B (10.0.11.0/24)  │ │
+ │ │  • EKS Worker Node (EC2)              │───┴────▶│  • EKS Worker Node (EC2)         │ │
+ │ │    - DevTrack Pods (Frontend, API)    │         │    - DevTrack Pods (PostgreSQL)  │ │
+ │ └───────────────────────────────────────┘         └──────────────────────────────────┘ │
+ │                                             ▲                                          │
+ │                                             │                                          │
+ │                          [EKS Managed Control Plane]                                   │
+ │                           (Kubernetes API Server / etcd)                               │
+ └────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Module 4.1 — AWS and Terraform Fundamentals
+- **Infrastructure as Code (IaC)**: Eliminates manual "ClickOps" in the AWS Management Console by defining all infrastructure in declarative, version-controlled HashiCorp Configuration Language (HCL).
+- **Key Terraform Concepts**:
+  - `terraform init`: Initializes the workspace, downloads specified AWS provider plugins.
+  - `terraform validate`: Verifies syntax and internal consistency of HCL files without cloud calls.
+  - `terraform plan`: Generates an execution plan, computing drift against current state and calculating additions (`+`), changes (`~`), and destructions (`-`).
+  - `terraform apply`: Provisions declared infrastructure in the exact dependency order.
+  - `terraform destroy`: Tears down all resources recorded in the state file in reverse dependency order.
+  - `terraform.tfstate`: JSON file recording real-world cloud resource IDs and attributes mapped to Terraform declarations.
+- **Local Tooling Verification**:
+  - `terraform`: v1.9.8 (verified installed)
+  - `aws-cli`: v2.37.10 (verified installed)
+  - `kubectl`: v1.35.1 (verified installed)
+  - AWS Credentials: Checked via `aws sts get-caller-identity`; credentials to be configured securely before Phase 4.8 apply.
+- **Cost Drivers Identified**:
+  - EKS Control Plane: ~$0.10/hour (~$72/month if left running).
+  - EC2 Worker Nodes: `t3.medium` instances (~$0.0416/hour each in `ap-south-1`).
+  - NAT Gateway (if enabled): ~$0.045/hour (~$32.40/month per NAT) + data processing.
+  - Cost Strategy: Deploy, verify, capture evidence for rubric & demo, then run `terraform destroy` promptly.
 
 
+### Module 4.2 — Terraform Project Configuration
+- **Directory Layout**: Created dedicated `terraform/` root directory isolating infrastructure code from application source code.
+- **Provider & Version Constraints (`versions.tf`)**:
+  - Terraform core pinned to `>= 1.5.0, < 2.0.0` (matching local Terraform `v1.9.8`).
+  - AWS provider pinned to `hashicorp/aws` `~> 5.50` for up-to-date EKS and VPC resource support.
+- **Provider Configuration (`providers.tf`)**:
+  - AWS provider configured to target `var.aws_region` (`ap-south-1`).
+  - Added global `default_tags` (`Project: DevTrack`, `Environment: var.environment`, `ManagedBy: Terraform`) for cost allocation and tag governance.
+  - Zero hardcoded credentials in source code.
+- **Variables & Defaults (`variables.tf`)**:
+  - Parameterized region, cluster name, Kubernetes version (`1.30`), CIDR ranges, and worker node scaling bounds.
+- **Outputs (`outputs.tf`)**:
+  - Declared outputs for region, environment, and cluster name.
+- **Example Blueprint (`terraform.tfvars.example`)**:
+  - Checked-in blueprint for parameter overrides containing zero real secrets.
+- **Security & Git Hygiene (`.gitignore`)**:
+  - Configured gitignore to exclude `.terraform/`, `*.tfstate*`, `*.tfplan*`, and local `terraform.tfvars`, while explicitly permitting `!terraform.tfvars.example`.
+
+### Module 4.3 — VPC and Networking Topology
+- **VPC Definition (`networking.tf`)**:
+  - CIDR block `10.0.0.0/16` providing 65,536 private IP addresses.
+  - Enabled DNS hostnames and DNS support (prerequisite for Kubernetes worker nodes and AWS VPC CNI).
+  - Tagged with `kubernetes.io/cluster/${var.cluster_name} = shared`.
+- **Availability Zone Dynamic Discovery**:
+  - Leverages `data "aws_availability_zones" "available"` to discover region AZs dynamically (`ap-south-1a`, `ap-south-1b`).
+- **Subnet Segmentation & CIDR Calculations**:
+  - **Public Subnets**: `10.0.1.0/24` (AZ a) and `10.0.2.0/24` (AZ b). Configured with `map_public_ip_on_launch = true`.
+  - **Private Subnets**: `10.0.10.0/24` (AZ a) and `10.0.11.0/24` (AZ b). Configured with `map_public_ip_on_launch = false`.
+- **Kubernetes Load Balancer Subnet Discovery Tags**:
+  - Public Subnets: `kubernetes.io/role/elb = "1"` (allows AWS Load Balancer Controller to auto-discover subnets for external ALBs/NLBs).
+  - Private Subnets: `kubernetes.io/role/internal-elb = "1"` (allows auto-discovery for internal load balancers).
+- **Internet Gateway & Routing**:
+  - `aws_internet_gateway` attached to the VPC.
+  - Dedicated public route table routing `0.0.0.0/0` $\rightarrow$ Internet Gateway.
+  - Associated with both public subnets via `aws_route_table_association`.
+- **Network Outputs**:
+  - Exported `vpc_id`, `vpc_cidr_block`, `public_subnet_ids`, and `private_subnet_ids` in `outputs.tf`.
+
+### Module 4.4 — NAT Architecture and Security Groups
+- **NAT Gateway Trade-off Analysis**:
+  - *Internet Gateway vs NAT Gateway*: IGW enables two-way internet traffic for public instances; NAT Gateway enables one-way outbound internet access for private instances without exposing their private IPs to incoming internet connections.
+  - *Architecture Choice*: Single NAT Gateway deployed in Public Subnet 1 (`enable_nat_gateway = true`), shared by both private subnets.
+  - *Cost Control*: ~$0.045/hour (~$0.045 to $0.09 for our testing session). Controlled via parameter `var.enable_nat_gateway`.
+- **EKS Control Plane Security Group (`aws_security_group.cluster`)**:
+  - Ingress: HTTPS (port 443) strictly from the worker node security group.
+  - Egress: Full outbound access to communicate with worker nodes and AWS APIs.
+- **Worker Node Security Group (`aws_security_group.node`)**:
+  - Intra-cluster ingress: All protocols/ports allowed between members of the same security group (`self = true`) for pod-to-pod networking across nodes.
+  - Ingress from Control Plane: Kubelet API (port 10250) for `kubectl exec`/`logs`, and HTTPS (port 443).
+  - Outbound egress: Full egress (`0.0.0.0/0`) for container image pulls (GHCR), DNS, and external dependencies.
+- **Tagged for Kubernetes**: `kubernetes.io/cluster/${var.cluster_name} = "owned"`.
+
+### Phase 4 M7 Rubric & Evidence Tracker (15 Points Total)
+
+| Rubric Item | Points | Requirement | Status | Verification / Evidence |
+| :--- | :---: | :--- | :---: | :--- |
+| **1. Terraform Directory & HCL** | 2 | Clean directory with valid, modular `.tf` files | ✅ Implemented | `terraform/` with `versions.tf`, `providers.tf`, `variables.tf`, `networking.tf`, `security.tf`, `outputs.tf` (`fmt` checked) |
+| **2. `terraform init` Success** | 1 | Provider download and backend initialization | ⏳ Pending | Scheduled for Part 4.7 |
+| **3. `terraform plan` Output** | 2 | Valid, non-empty plan showing resources to add | ⏳ Pending | Scheduled for Part 4.7 |
+| **4. VPC & Public Subnets** | 3 | VPC provisioned with $\ge 2$ public subnets in distinct AZs | ⏳ Code Ready | Defined in `networking.tf`; awaiting apply in Part 4.8 |
+| **5. EKS Cluster & Node Group** | 4 | ACTIVE EKS cluster and ACTIVE managed worker node group | ⏳ Pending | Scheduled for Part 4.5 & 4.8 |
+| **6. Clean `terraform destroy`** | 2 | Clean teardown of all managed infrastructure | ⏳ Pending | Scheduled for Part 4.9 |
+| **7. `terraform.tfvars.example`** | 1 | Example variables file committed without real secrets | ✅ Verified | `terraform/terraform.tfvars.example` created & tracked |
