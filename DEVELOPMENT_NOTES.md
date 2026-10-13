@@ -554,5 +554,35 @@ Executed against live Amazon EKS cluster in `ap-southeast-2` (DevTrack namespace
   - Manual sync adopted to establish ArgoCD resource tracking metadata smoothly.
 - **Cost & Access Model**: ArgoCD UI will be accessed exclusively via `kubectl port-forward` to avoid creating costly public cloud Load Balancers.
 
+### Module 6.2 — ArgoCD Control Plane Installation
+- **Namespace Provisioning**: Created dedicated namespace `argocd`.
+- **Installation Method**: Deployed official stable manifests using Kubernetes Server-Side Apply (`kubectl apply --server-side --force-conflicts`) to handle oversized CRD annotations (`applicationsets.argoproj.io`) without truncation errors.
+- **Component Health Verification**: All 7 core ArgoCD components running healthy:
+  - `argocd-application-controller-0`: 1/1 Running
+  - `argocd-applicationset-controller`: 1/1 Running
+  - `argocd-dex-server`: 1/1 Running
+  - `argocd-notifications-controller`: 1/1 Running
+  - `argocd-redis`: 1/1 Running
+  - `argocd-repo-server`: 1/1 Running
+  - `argocd-server`: 1/1 Running
+
+### Module 6.3 — Declarative GitOps Application (`argocd/application.yaml`)
+- **Application Specification**:
+  - Repository: `https://github.com/Pranav-learner/DevOps_Capstone_Project.git`
+  - Target Revision: `main`
+  - Chart Path: `helm/devtrack`
+  - Destination: `https://kubernetes.default.svc` in namespace `devtrack`
+  - Sync Options: `CreateNamespace=true`, `RespectIgnoreDifferences=true`, `ApplyOutOfSyncOnly=true`.
+
+### Module 6.4 — Safe Workload Adoption & Zero-Downtime Synchronization
+- **Pre-Sync Audit**: ArgoCD pulled the Git repository, rendered the Helm templates, and detected all 11 live resources in `OutOfSync` state.
+- **Initial Sync Execution**: Triggered manual initial sync to attach tracking labels without disrupting running containers.
+- **Outcome**:
+  - All 11 resources transitioned to `Sync=Synced`.
+  - Zero pod restarts (`RESTARTS: 0`).
+  - PostgreSQL persistent volume claim (`devtrack-postgres-pvc`) remained `Bound` to AWS EBS volume with 100% data preservation.
+- **Automated GitOps Reconciliation**: Updated `syncPolicy` with `automated: {prune: false, selfHeal: true}` to enable continuous Git-to-cluster synchronization.
+
+
 
 
