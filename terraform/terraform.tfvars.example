@@ -2,7 +2,7 @@
 # Copy this file to terraform.tfvars to customize your deployment.
 # NEVER commit real credentials, passwords, or secrets to Git.
 
-aws_region           = "ap-south-1"
+aws_region           = "ap-southeast-2"
 environment          = "production"
 cluster_name         = "devtrack-eks-cluster"
 cluster_version      = "1.30"

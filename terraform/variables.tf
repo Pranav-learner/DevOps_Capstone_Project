@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "Target AWS region for DevTrack infrastructure"
   type        = string
-  default     = "ap-south-1"
+  default     = "ap-southeast-2"
 }
 
 variable "environment" {
