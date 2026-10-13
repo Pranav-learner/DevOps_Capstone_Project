@@ -42,3 +42,29 @@ output "node_security_group_id" {
   description = "Security group ID for the EKS worker nodes"
   value       = aws_security_group.node.id
 }
+
+output "cluster_endpoint" {
+  description = "Endpoint URL for Amazon EKS control plane API server"
+  value       = aws_eks_cluster.devtrack.endpoint
+}
+
+output "cluster_certificate_authority_data" {
+  description = "Base64 encoded certificate data required to communicate with the cluster"
+  value       = aws_eks_cluster.devtrack.certificate_authority[0].data
+  sensitive   = true
+}
+
+output "cluster_oidc_issuer_url" {
+  description = "The URL on the EKS cluster for the OpenID Connect identity provider"
+  value       = aws_eks_cluster.devtrack.identity[0].oidc[0].issuer
+}
+
+output "node_group_id" {
+  description = "EKS managed Node Group ID"
+  value       = aws_eks_node_group.devtrack.id
+}
+
+output "node_group_status" {
+  description = "Status of the EKS managed Node Group"
+  value       = aws_eks_node_group.devtrack.status
+}

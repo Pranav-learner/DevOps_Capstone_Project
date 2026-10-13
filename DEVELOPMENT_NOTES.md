@@ -271,14 +271,69 @@ The target environment consists of:
   - Outbound egress: Full egress (`0.0.0.0/0`) for container image pulls (GHCR), DNS, and external dependencies.
 - **Tagged for Kubernetes**: `kubernetes.io/cluster/${var.cluster_name} = "owned"`.
 
+### Module 4.5 — Amazon EKS Cluster & Managed Node Group
+- **Kubernetes Version Selection**:
+  - Pinned to `1.30` in `variables.tf`. Fully supported across AWS EKS and the AWS provider `~> 5.50`.
+- **EKS Control Plane (`aws_eks_cluster.devtrack`)**:
+  - AWS-managed Kubernetes master nodes running API server, controller manager, and etcd.
+  - Subnet configuration: Associated with all public and private subnets across `ap-south-1a` and `ap-south-1b` for resilient cross-account ENI placement.
+  - Endpoint Access: Enabled both `endpoint_private_access = true` and `endpoint_public_access = true` (enables developer laptop access via `kubectl` without requiring an AWS Client VPN or bastion host).
+- **Cluster IAM Role (`aws_iam_role.cluster`)**:
+  - Assume role policy for `eks.amazonaws.com`.
+  - Attached policies: `AmazonEKSClusterPolicy` and `AmazonEKSVPCResourceController`.
+- **Managed Worker Node Group (`aws_eks_node_group.devtrack`)**:
+  - Placed strictly in private subnets (`aws_subnet.private[*].id`) for workload isolation.
+  - EC2 instance type: `t3.medium` (2 vCPU, 4 GiB RAM), providing sufficient headroom for AWS VPC CNI, CoreDNS, kube-proxy, and DevTrack 3-tier microservices.
+  - Scaling boundaries: `desired_size = 2`, `min_size = 1`, `max_size = 3`.
+  - Rolling update strategy: `max_unavailable = 1`.
+- **Worker Node IAM Role (`aws_iam_role.node`)**:
+  - Assume role policy for `ec2.amazonaws.com`.
+  - Attached policies: `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy` (for ENI IP management), and `AmazonEC2ContainerRegistryReadOnly`.
+- **EKS Outputs**:
+  - Exported `cluster_endpoint`, `cluster_certificate_authority_data`, `cluster_oidc_issuer_url`, `node_group_id`, and `node_group_status` in `outputs.tf`.
+
+### Module 4.6 — Terraform State and Lifecycle Management
+- **State File Anatomy (`terraform.tfstate`)**:
+  - Acts as the definitive ledger mapping declarative HCL resources to real-world AWS resource IDs (e.g., `vpc-0123...`, `eks-cluster-...`).
+  - Records dependencies, provider metadata, and computed attributes.
+- **Resource Addressing & Dependency Graph**:
+  - Address notation: `<resource_type>.<name>` (e.g., `aws_vpc.devtrack`, `aws_eks_node_group.devtrack`).
+  - Count indices: `<resource_type>.<name>[<index>]` (e.g., `aws_subnet.public[0]`).
+  - Terraform builds a Directed Acyclic Graph (DAG) determining execution order:
+    1. Independent resources (VPC, IAM roles) are created concurrently.
+    2. Dependent subnets and route tables are created once VPC exists.
+    3. EKS Cluster is created once subnets, security groups, and IAM role attachments exist.
+    4. Node group is created last once EKS cluster is ACTIVE.
+- **Drift Detection & Cloud Reconciliation**:
+  - During `terraform plan` or `refresh`, Terraform queries the AWS API to check whether real infrastructure matches state.
+  - If a resource was modified or deleted manually in the AWS Console ("ClickOps"), Terraform calculates the drift and plans additions or updates to restore the declared state.
+- **State Locking & Collaboration Models**:
+  - *Local State (Capstone)*: Stored in `terraform/terraform.tfstate`. Fast, self-contained, requiring zero pre-existing cloud storage. Safe for single-student capstone workflows.
+  - *Remote State (Production / Team)*: AWS S3 backend (encrypted with KMS, versioned) paired with DynamoDB table for distributed write locking (`StateLock`), preventing concurrent apply collisions.
+  - *Security Mandate*: `.tfstate` files are strictly excluded from version control via `.gitignore` to prevent secret leakage.
+
+### Module 4.7 — Validation, Initialization, and Plan Preparation
+- **Code Style Verification (`terraform fmt -check`)**:
+  - Validated all `.tf` files in `terraform/` directory. Zero syntax or indentation deviations.
+- **Provider Initialization (`terraform init`)**:
+  - Successfully connected to HashiCorp Registry and installed `hashicorp/aws v5.100.0`.
+  - Created `.terraform.lock.hcl` pinning provider checksums.
+  - Exit code `0` achieved (Rubric Item 2 completed).
+- **Static Schema Validation (`terraform validate`)**:
+  - Validated all HCL resources, blocks, types, and variables across `versions.tf`, `providers.tf`, `variables.tf`, `networking.tf`, `security.tf`, `eks.tf`, and `outputs.tf`.
+  - Returned: `Success! The configuration is valid.` with 0 errors.
+- **Plan Preparation (`terraform plan`)**:
+  - Requires AWS credentials to query live Availability Zones via `data "aws_availability_zones" "available"` before calculating resource additions.
+  - Secure credential configuration guided via `aws configure` (avoiding hardcoded secrets).
+
 ### Phase 4 M7 Rubric & Evidence Tracker (15 Points Total)
 
 | Rubric Item | Points | Requirement | Status | Verification / Evidence |
 | :--- | :---: | :--- | :---: | :--- |
-| **1. Terraform Directory & HCL** | 2 | Clean directory with valid, modular `.tf` files | ✅ Implemented | `terraform/` with `versions.tf`, `providers.tf`, `variables.tf`, `networking.tf`, `security.tf`, `outputs.tf` (`fmt` checked) |
-| **2. `terraform init` Success** | 1 | Provider download and backend initialization | ⏳ Pending | Scheduled for Part 4.7 |
-| **3. `terraform plan` Output** | 2 | Valid, non-empty plan showing resources to add | ⏳ Pending | Scheduled for Part 4.7 |
+| **1. Terraform Directory & HCL** | 2 | Clean directory with valid, modular `.tf` files | ✅ Implemented | `terraform/` with `versions.tf`, `providers.tf`, `variables.tf`, `networking.tf`, `security.tf`, `eks.tf`, `outputs.tf` (`fmt` checked) |
+| **2. `terraform init` Success** | 1 | Provider download and backend initialization | ✅ Verified | `terraform init` exited with code 0; installed `aws v5.100.0` |
+| **3. `terraform plan` Output** | 2 | Valid, non-empty plan showing resources to add | ⏳ Ready for Auth | Validated via `terraform validate`; awaiting `aws configure` for cloud refresh |
 | **4. VPC & Public Subnets** | 3 | VPC provisioned with $\ge 2$ public subnets in distinct AZs | ⏳ Code Ready | Defined in `networking.tf`; awaiting apply in Part 4.8 |
-| **5. EKS Cluster & Node Group** | 4 | ACTIVE EKS cluster and ACTIVE managed worker node group | ⏳ Pending | Scheduled for Part 4.5 & 4.8 |
+| **5. EKS Cluster & Node Group** | 4 | ACTIVE EKS cluster and ACTIVE managed worker node group | ⏳ Code Ready | Defined in `eks.tf`; awaiting apply in Part 4.8 |
 | **6. Clean `terraform destroy`** | 2 | Clean teardown of all managed infrastructure | ⏳ Pending | Scheduled for Part 4.9 |
 | **7. `terraform.tfvars.example`** | 1 | Example variables file committed without real secrets | ✅ Verified | `terraform/terraform.tfvars.example` created & tracked |
