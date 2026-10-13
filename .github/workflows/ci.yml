@@ -8,6 +8,11 @@ on:
     branches:
       - main
 
+# Prevent duplicate parallel runs on the same branch/PR; cancel obsolete runs in-progress
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
@@ -140,7 +145,11 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ env.IMAGE_OWNER }}/devtrack-backend:latest
+          tags: |
+            ghcr.io/${{ env.IMAGE_OWNER }}/devtrack-backend:${{ github.sha }}
+            ghcr.io/${{ env.IMAGE_OWNER }}/devtrack-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and Push Frontend Docker image
         uses: docker/build-push-action@v6
@@ -148,4 +157,9 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ghcr.io/${{ env.IMAGE_OWNER }}/devtrack-frontend:latest
+          tags: |
+            ghcr.io/${{ env.IMAGE_OWNER }}/devtrack-frontend:${{ github.sha }}
+            ghcr.io/${{ env.IMAGE_OWNER }}/devtrack-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
