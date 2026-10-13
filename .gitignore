@@ -35,3 +35,7 @@ crash.*.log
 terraform.tfvars
 *.auto.tfvars
 !terraform.tfvars.example
+
+# Kubernetes Secrets
+k8s/secret.yaml
+!k8s/secret.example.yaml

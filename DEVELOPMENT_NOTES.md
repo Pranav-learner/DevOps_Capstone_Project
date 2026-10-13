@@ -337,3 +337,51 @@ The target environment consists of:
 | **5. EKS Cluster & Node Group** | 4 | ACTIVE EKS cluster and ACTIVE managed worker node group | ⏳ Code Ready | Defined in `eks.tf`; awaiting apply in Part 4.8 |
 | **6. Clean `terraform destroy`** | 2 | Clean teardown of all managed infrastructure | ⏳ Pending | Scheduled for Part 4.9 |
 | **7. `terraform.tfvars.example`** | 1 | Example variables file committed without real secrets | ✅ Verified | `terraform/terraform.tfvars.example` created & tracked |
+
+## Phase 5 — Kubernetes Workloads & Helm (Underway)
+
+### Overview
+In Phase 5, we transition DevTrack from Docker Compose containerization to declarative Kubernetes workloads and reusable Helm charts.
+All workloads target the dedicated `devtrack` namespace and pull verified OCI images from GitHub Container Registry (`ghcr.io/pranav-learner/devtrack-*`).
+
+### Module 5.1 — Preflight Discovery
+- **Toolchain Audited**:
+  - `kubectl`: v1.35.1 (Active)
+  - `helm`: v3.17.1 (Active)
+  - `minikube`: v1.38.1 (Installed)
+- **Container Registry Baseline**:
+  - Backend: `ghcr.io/pranav-learner/devtrack-backend`
+  - Frontend: `ghcr.io/pranav-learner/devtrack-frontend`
+  - Tag Strategy: Pinned full Git commit SHA (`bb56f13b43164745584512374d5e1f66cbdf75b6`) alongside `latest`.
+
+### Module 5.2 — Kubernetes Resource Fundamentals & Core Workloads
+- **Dedicated Namespace (`k8s/namespace.yaml`)**:
+  - Namespace `devtrack` with standard Kubernetes recommended labels.
+- **Backend Workload (`k8s/backend-deployment.yaml` & `k8s/backend-service.yaml`)**:
+  - 2 Replicas for high availability (satisfies rubric requirement).
+  - RollingUpdate deployment strategy (`maxSurge: 1`, `maxUnavailable: 0`).
+  - Container port 8000 mapped to ClusterIP service `devtrack-backend`.
+  - Non-root security context (`appuser` UID 1000).
+  - Resource requests: CPU 100m, Memory 128Mi; limits: CPU 300m, Memory 256Mi.
+  - Liveness probe (`/health`) and readiness probe (`/ready`).
+- **Frontend Workload (`k8s/frontend-deployment.yaml` & `k8s/frontend-service.yaml`)**:
+  - 2 Replicas of Nginx unprivileged SPA.
+  - Container port 8080 exposed via ClusterIP service `devtrack-frontend` on port 80.
+  - Non-root security context (`nginx` UID 101).
+  - Liveness probe (`/`) and readiness probe (`/`).
+  - Resource requests: CPU 50m, Memory 64Mi; limits: CPU 200m, Memory 128Mi.
+
+### Module 5.3 — ConfigMaps, Secrets, and PostgreSQL Persistence
+- **Decoupled Configuration (`k8s/configmap.yaml`)**:
+  - ConfigMap `devtrack-config` isolating non-sensitive variables (`POSTGRES_DB: devtrack`, `POSTGRES_USER: postgres`, `POSTGRES_HOST: devtrack-postgres`, `POSTGRES_PORT: 5432`, `ENVIRONMENT: production`).
+- **Secret Hygiene (`k8s/secret.example.yaml`)**:
+  - Clean template blueprint providing connection string format without real credentials.
+  - Excluded `k8s/secret.yaml` from Git tracking via `.gitignore`.
+- **Database Persistence (`k8s/postgres-pvc.yaml`)**:
+  - 1 GiB ReadWriteOnce `PersistentVolumeClaim` ensuring issue and user data persists across Pod restarts and upgrades.
+- **PostgreSQL Stateful Workload (`k8s/postgres-deployment.yaml` & `k8s/postgres-service.yaml`)**:
+  - Single replica with `strategy: Recreate` preventing dual-pod write lock collisions on the PVC.
+  - Backed by official `postgres:16-alpine`.
+  - Mounted volume at `/var/lib/postgresql/data` with `subPath: postgres`.
+  - Health probes using `pg_isready -U postgres -d devtrack` for liveness and readiness.
+  - ClusterIP service exposing port 5432 resolving `devtrack-postgres:5432` internally for backend Pods.
