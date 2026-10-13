@@ -100,7 +100,7 @@ docker compose down -v
 6. **3.6 GitHub Container Registry (GHCR)**: Configured least-privilege `packages: write` permissions, automated authentication via ephemeral `GITHUB_TOKEN`, normalized lowercase image paths, and established publishing to `ghcr.io`.
 7. **3.7 Git SHA Image Tagging**: Implemented dual-tagging strategy applying full 40-character immutable Git commit SHA (`${{ github.sha }}`) alongside `latest` for both frontend and backend images.
 8. **3.8 Pipeline Quality & Security**: Configured workflow concurrency control (`cancel-in-progress: true`), Docker Buildx GHA layer caching (`type=gha`), restricted publishing to trusted `push` events, and pinned actions.
-9. **3.9 End-to-End Verification**: *(Planned)*
+9. **3.9 End-to-End Verification**: Validated full pipeline execution through GitHub Actions, including deliberate failure injection (commit `e80c487`) proving the quality gate blocks image publication, followed by green restoration (commit `f43cc78`).
 
 ## Phase 3 CI/CD Architecture & Quality Gates
 - **Trigger Strategy**: Pipeline triggers automatically on direct pushes to `main` and on pull requests targeting `main`. Image publishing runs exclusively on validated pushes to `main`.
@@ -111,17 +111,54 @@ docker compose down -v
 - **Immutable Tagging**: Images are tagged with the full 40-character Git commit SHA (`${{ github.sha }}`) to guarantee 100% auditability and enable reliable rollbacks.
 - **Build Performance**: Leverages Buildx GitHub Actions Cache (`type=gha`, `mode=max`) to persist intermediate Docker layer caches across workflow runs.
 
+### Quality Gate Verification Flow
+```text
+                    TEST 1: Normal Healthy Commit
+                    ─────────────────────────────
+                             git push
+                                │
+               ┌────────────────┴────────────────┐
+               ▼ (PASS)                          ▼ (PASS)
+        [backend-test]                    [frontend-build]
+               └────────────────┬────────────────┘
+                                │
+                                ▼ (EXECUTES)
+                         [docker-build]
+                                │
+                                ▼
+                       ✅ Published to GHCR
+
+
+                    TEST 2: Deliberate Failure Injection
+                    ────────────────────────────────────
+                       git push (broken test)
+                                │
+               ┌────────────────┴────────────────┐
+               ▼ (FAILS ❌)                      ▼ (PASS)
+        [backend-test]                    [frontend-build]
+               │                                 │
+               └────────────────┬────────────────┘
+                                │
+                                ▼ (BLOCKED ⛔)
+                         [docker-build]
+                           (SKIPPED!)
+                                │
+                                ▼
+                     Zero images published!
+                   Quality Gate Protected Repo!
+```
+
 ## Phase 3 M5 Rubric & Evidence Tracker
 
-| Criteria | Requirement | Status | Verification Location |
+| Criteria | Requirement | Status | Verification Location / Evidence |
 | :--- | :--- | :---: | :--- |
 | **1. Workflow Exists** | At least one workflow in `.github/workflows/` | ✅ Verified | `.github/workflows/ci.yml` |
 | **2. Trigger on `main`** | Triggers on push to `main` branch | ✅ Verified | `on.push.branches: [main]` |
-| **3. Pytest Quality Gate** | Pytest runs in CI; failure fails build | ✅ Verified | `backend-test` job in `.github/workflows/ci.yml` |
+| **3. Pytest Quality Gate** | Pytest runs in CI; failure fails build | ✅ Verified | `backend-test` job; verified blocking via commit `e80c487` |
 | **4. Frontend Build Gate** | Production build runs in CI | ✅ Verified | `frontend-build` job in `.github/workflows/ci.yml` |
 | **5. Docker Image Builds** | Both backend & frontend images build | ✅ Verified | `docker-build` job in `.github/workflows/ci.yml` |
-| **6. Publish to GHCR** | Both images pushed to `ghcr.io` | ✅ Verified | `docker/login-action` + GHCR push in `ci.yml` |
-| **7. Immutable SHA Tags** | Image tags use Git commit SHA (not just `latest`) | ✅ Verified | `docker-build` tags in `.github/workflows/ci.yml` |
+| **6. Publish to GHCR** | Both images pushed to `ghcr.io` | ✅ Verified | Published to `ghcr.io/pranav-learner/devtrack-*` |
+| **7. Immutable SHA Tags** | Image tags use Git commit SHA (not just `latest`) | ✅ Verified | Tagged with `${{ github.sha }}` and `latest` in GHCR |
 
 
 
