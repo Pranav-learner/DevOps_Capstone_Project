@@ -39,3 +39,5 @@ terraform.tfvars
 # Kubernetes Secrets
 k8s/secret.yaml
 !k8s/secret.example.yaml
+.~lock.*#
+*.tmp
