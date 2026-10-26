@@ -2,10 +2,13 @@
 > **Enterprise Developer Project & Issue Management Platform — DevOps Capstone Project**
 
 [![DevTrack CI/CD Pipeline](https://github.com/Pranav-learner/DevOps_Capstone_Project/actions/workflows/ci.yml/badge.svg)](https://github.com/Pranav-learner/DevOps_Capstone_Project/actions/workflows/ci.yml)
+[![Live Demo Walkthrough](https://img.shields.io/badge/Live%20Demo-Walkthrough%20Video-ff5722.svg)](demo/devtrack_live_walkthrough.mp4)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.31-blue.svg)](https://kubernetes.io/)
 [![Terraform](https://img.shields.io/badge/Terraform-IaC-purple.svg)](https://www.terraform.io/)
 [![Security: Trivy](https://img.shields.io/badge/Security-Trivy%20Clean-brightgreen.svg)](https://trivy.dev/)
+
+> 📺 **Live Video Walkthrough:** Watch the complete end-to-end DevOps demonstration (Codebase, CI/CD, Terraform, ArgoCD, Kubernetes, Prometheus & Grafana) in [demo/devtrack_live_walkthrough.mp4](demo/devtrack_live_walkthrough.mp4).
 
 DevTrack is a production-grade 3-tier issue tracking and project management platform built to demonstrate advanced modern DevOps engineering from source code and containerization to automated CI/CD pipelines, container security scanning, infrastructure-as-code (IaC) on AWS, Kubernetes cluster orchestration via Helm, and enterprise observability with Prometheus and Grafana.
 
@@ -218,6 +221,7 @@ Open [http://localhost:3001/d/devtrack-app-overview/777fce9e-37f0-5a05-9fe9-ab9b
 ## 10. Capstone Evidence & Submission Artifacts
 
 All verification artifacts and evidence screenshots are maintained directly in the repository:
+* **📹 Live Video Walkthrough (2m 40s):** [demo/devtrack_live_walkthrough.mp4](demo/devtrack_live_walkthrough.mp4) — *Full end-to-end operational walkthrough covering Codebase, CI/CD, Terraform, ArgoCD, Kubernetes, Prometheus & Grafana.*
 * **Presentation Slide Deck:** [demo/presentation.pptx](demo/presentation.pptx) *(also available under [demo/ppt/](demo/ppt/))*
 * **Engineering Notes & Audits:** [DEVELOPMENT_NOTES.md](DEVELOPMENT_NOTES.md)
 * **Evidence Screenshots Directory:** [demo/screenshots/](demo/screenshots/)
